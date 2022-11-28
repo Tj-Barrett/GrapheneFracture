@@ -1,0 +1,112 @@
+#-----------------------------------------------------------
+# Simualtion Variables
+#-----------------------------------------------------------
+# Temperature
+variable T1 equal 300
+
+# Timestep
+variable tms equal 0.001
+variable tdamp equal ${tms}*100.0
+variable pdamp equal ${tms}*1000.0
+#-----------------------------------------------------------------
+# CNT Only
+#-----------------------------------------------------------------
+units		metal
+atom_style	molecular
+
+variable fname string 'LouArmchairSingleCrystal-a0-10-r02'
+
+label equi_timesteps
+variable equi_loop loop 1 100
+
+    variable loop_val equal ${equi_loop}
+    read_restart   ${fname}_${loop_val}.rst
+
+
+    pair_style rebo #1.92
+    pair_coeff * * CH_Lou.rebo C
+
+    mass * 12.0107
+
+    newton on
+
+    #-----------------------------------------------------------
+    # Set up computes
+    #-----------------------------------------------------------
+
+    compute temps all temp
+    # Stress/ Atom Method
+    compute SAperatom all stress/atom NULL virial
+    # average per atom. (Summing and dividing over total volume) and (averaging peratom stress then dividing by single volume) are the same
+    compute SApress all reduce ave c_SAperatom[1] c_SAperatom[2] c_SAperatom[3] c_SAperatom[4] c_SAperatom[5] c_SAperatom[6]
+
+    #-----------------------------------------------------------
+    # Run Equilibrium
+    #-----------------------------------------------------------
+    # fix	1 all npt temp ${T1} ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
+    #
+    # thermo_style custom step temp
+    # thermo          1000
+    # timestep ${tms}
+    # run 100000
+
+    #-----------------------------------------------------------
+    # Run Tensile
+    #-----------------------------------------------------------
+    # strain
+    variable temps equal c_temps
+
+    variable tmpx equal "lx"
+    variable tmpy equal "ly"
+    variable Lx0 equal ${tmpx}
+    variable Ly0 equal ${tmpy}
+
+    # Strain
+    variable strainx equal "(lx - v_Lx0)/v_Lx0"
+    variable strainy equal "(ly - v_Ly0)/v_Ly0"
+
+    variable truestrainx equal "ln(lx/v_Lx0)"
+    variable truestrainy equal "ln(ly/v_Ly0)"
+
+    # graphene volume
+    variable xyarea equal "lx*ly"
+    variable graph_thickness equal 3.4 # taken from Lou Paper
+    variable totalbeads equal count(all)
+    variable graph_vol equal "v_xyarea*v_graph_thickness/v_totalbeads"
+    variable aratio equal "v_xyarea/(v_Lx0*v_Ly0)"
+
+    # sampling rate
+    variable sample_rate equal 10
+
+    # stress/atom is units pressure*volume, so divide by volume, and convert bar to Pa
+    variable SA_stressxx equal c_SApress[1]/v_graph_vol*1E5
+    variable SA_stressyy equal c_SApress[2]/v_graph_vol*1E5
+    variable SA_stresszz equal c_SApress[3]/v_graph_vol*1E5
+    variable SA_stressxy equal c_SApress[4]/v_graph_vol*1E5
+    variable SA_stressxz equal c_SApress[5]/v_graph_vol*1E5
+    variable SA_stressyz equal c_SApress[6]/v_graph_vol*1E5
+
+
+    fix def21 all print ${sample_rate} "${strainy} ${truestrainy} ${SA_stressxx} ${SA_stressyy} ${SA_stresszz} ${SA_stressxy} ${SA_stressxz} ${SA_stressyz}" file Graphene_NPT_REBO_Strain.SA${sample_rate}_${loop_val}.txt screen no
+    fix def22 all print ${sample_rate} "${temps} ${strainy} ${aratio} ${SA_stressxx} ${SA_stressyy} ${SA_stresszz}" file Graphene_NPT_TEMP_REBO_Strain.SA${sample_rate}_${loop_val}.txt screen no
+
+    dump            14 all custom 100 Graphene_NPT_REBO_Strain.dump id mol type x y z c_SAperatom[*]
+
+    # fix	1 all nvt temp ${T1} ${T1} ${tdamp}
+    fix	1 all npt temp ${T1} ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
+    fix 2 all deform 1 y erate ${tms} #remap x
+
+    # cleaning data if desired
+    # fix 3 all ave/time 1 ${sample_rate} ${sample_rate} v_tmpx v_tmpy v_strainx v_strainy v_truestrainx v_truestrainy v_xyarea
+    # fix 4 all ave/time 1 ${sample_rate} ${sample_rate} v_temps v_SA_stressxx v_SA_stressyy v_SA_stresszz v_SA_stressxy v_SA_stressxz v_SA_stressyz
+
+    thermo_style custom step temp v_strainy v_SA_stressyy v_aratio
+    thermo          100
+    timestep ${tms}
+    run 40000
+
+    print "All done"
+
+    clear
+next equi_loop
+jump SELF equi_timesteps

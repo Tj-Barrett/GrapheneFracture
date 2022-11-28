@@ -1,0 +1,73 @@
+#-----------------------------------------------------------
+# Simualtion Variables
+#-----------------------------------------------------------
+# Temperature
+variable T1 equal 300
+
+# Timestep
+variable tms equal 0.001
+variable tdamp equal ${tms}*100.0
+variable pdamp equal ${tms}*1000.0
+#-----------------------------------------------------------------
+# CNT Only
+#-----------------------------------------------------------------
+units		metal
+atom_style	molecular
+boundary    p p f
+
+variable fname string 'LouArmchairSingleCrystal-a0-10-r02'
+read_data 'LouArmchairSingleCrystal-a0-10-r02.data'
+
+pair_style rebo #1.92
+pair_coeff * * CH_Lou.rebo C
+
+mass * 12.0107
+
+newton on
+
+#-----------------------------------------------------------
+# Set up regions
+#-----------------------------------------------------------
+variable xlen equal lx
+variable ylen equal ly
+variable zlen equal lz
+
+# remap to 0,0,0
+change_box all x final 0 ${xlen} y final 0 ${ylen} z final 0 ${zlen} remap
+
+#-----------------------------------------------------------
+# Equilibrate
+#-----------------------------------------------------------
+minimize 1.0e-6 1.0e-8 10000 10000
+
+dump            14 all custom 10000 Graphene_NPT_Lou_Relax.dump id mol type x y z
+
+fix 1 all npt temp 1.0 ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} y 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
+thermo_style custom  step temp epair emol etotal press vol
+thermo          10000
+timestep ${tms}
+run 500000
+
+# Equilibration
+label equi_timesteps1
+variable equi_loop1 loop 1 5
+    fix 1 all npt temp ${T1} ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} y 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
+    write_restart   ${fname}_${equi_loop1}.rst
+    run 1000000
+
+next equi_loop1
+jump SELF equi_timesteps1
+
+
+# Printing Equilibration
+label equi_timesteps2
+variable equi_loop2 loop 1 100
+    fix 1 all npt temp ${T1} ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} y 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
+    write_data   ${fname}_${equi_loop2}.data
+    run 10000
+
+next equi_loop2
+jump SELF equi_timesteps2
+
+undump 14
+unfix 1

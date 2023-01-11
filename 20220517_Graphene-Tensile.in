@@ -93,10 +93,16 @@ variable equi_loop loop 1 100
     dump            14 all custom 100 Graphene_NPT_REBO_Strain.dump id mol type x y z c_SAperatom[*]
 
     # fix	1 all nvt temp ${T1} ${T1} ${tdamp}
-    fix	1 all npt temp ${T1} ${T1} ${tdamp} x 1.01325 1.01325 ${pdamp} z 0.0 0.0 ${pdamp}
-    fix 2 all deform 1 y erate ${tms} #remap x
+    # fix	1 all npt temp ${T1} ${T1} ${t_tau} x 1.01325 1.01325 ${p_tau} # y 1.01325 1.01325 ${p_tau}
+    # fix	1 all nph x 1.01325 1.01325 ${p_tau} y 1.01325 1.01325 ${p_tau}
+    # fix 3 all press/berendsen x 1.01325 1.01325 ${p_tau} modulus 8E6
+    fix 1 all nve
+    # fix 1 all nph x 1.01325 1.01325 ${p_tau}
+    # fix 3 all temp/berendsen ${T1} ${T1} ${tdamp}
+    # fix 3 all langevin ${T1} ${T1} ${tdamp} 999999
+    fix 2 all deform 1 y erate ${tms} #y volume#remap x
 
-    # cleaning data if desired
+    # cleaning data
     # fix 3 all ave/time 1 ${sample_rate} ${sample_rate} v_tmpx v_tmpy v_strainx v_strainy v_truestrainx v_truestrainy v_xyarea
     # fix 4 all ave/time 1 ${sample_rate} ${sample_rate} v_temps v_SA_stressxx v_SA_stressyy v_SA_stresszz v_SA_stressxy v_SA_stressxz v_SA_stressyz
 
